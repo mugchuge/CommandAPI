@@ -21,7 +21,7 @@
 	<parent>
 		<artifactId>commandapi</artifactId>
 		<groupId>dev.jorel</groupId>
-		<version>6.1.0</version>
+		<version>6.1.1</version>
 	</parent>
 	<modelVersion>4.0.0</modelVersion>
 
@@ -33,12 +33,12 @@
 
 	<dependencies>
 		
-		<dependency>
+		<!-- <dependency>
 			<groupId>org.spigotmc</groupId>
 			<artifactId>spigot</artifactId>
 			<version>1.17.1-R0.1-SNAPSHOT</version>
 			<scope>test</scope>
-		</dependency>
+		</dependency> -->
 		<dependency>
 			<groupId>org.spigotmc</groupId>
 			<artifactId>spigot</artifactId>
@@ -48,7 +48,7 @@
 		<dependency>
 			<groupId>dev.jorel</groupId>
 			<artifactId>commandapi-core</artifactId>
-			<version>6.1.0</version>
+			<version>6.1.1</version>
 			<scope>compile</scope>
 		</dependency>
 	</dependencies>

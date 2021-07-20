@@ -22,10 +22,6 @@ package dev.jorel.commandapi.nms;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,14 +32,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 import org.bukkit.Axis;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.Keyed;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.OfflinePlayer;
@@ -73,9 +67,9 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ComplexRecipe;
-import org.bukkit.inventory.Recipe;
 import org.bukkit.potion.PotionEffectType;
 
+import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import com.google.gson.GsonBuilder;
 import com.mojang.brigadier.arguments.ArgumentType;
@@ -85,7 +79,6 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.suggestion.Suggestions;
 
 import de.tr7zw.nbtapi.NBTContainer;
-import dev.jorel.commandapi.CommandAPI;
 import dev.jorel.commandapi.CommandAPIHandler;
 import dev.jorel.commandapi.arguments.SuggestionProviders;
 import dev.jorel.commandapi.preprocessor.RequireField;
@@ -103,7 +96,6 @@ import io.papermc.paper.text.PaperComponents;
 import net.kyori.adventure.text.Component;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.chat.ComponentSerializer;
-import net.minecraft.Util;
 import net.minecraft.advancements.critereon.MinMaxBounds;
 import net.minecraft.commands.CommandFunction;
 import net.minecraft.commands.CommandFunction.Entry;
@@ -154,10 +146,11 @@ import net.minecraft.server.ServerFunctionManager;
 import net.minecraft.server.ServerResources;
 import net.minecraft.server.level.ColumnPos;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.packs.resources.ReloadableResourceManager;
+import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.pattern.BlockInWorld;
+import net.minecraft.world.level.storage.WorldData;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
@@ -168,18 +161,6 @@ import net.minecraft.world.phys.Vec3;
 public class NMS_1_17_R1 implements NMS<CommandSourceStack> {
 	
 	private static final MinecraftServer MINECRAFT_SERVER = ((CraftServer) Bukkit.getServer()).getServer();
-	private static final VarHandle ServerFunctionLibrary_functionCompilationLevel;
-	
-	// Compute all var handles all in one go so we don't do this during main server runtime
-	static {
-		VarHandle sfl_fcl = null;
-		 try {
-			 sfl_fcl = MethodHandles.privateLookupIn(ServerFunctionLibrary.class, MethodHandles.lookup()).findVarHandle(ServerFunctionLibrary.class, "h", int.class);
-		} catch (ReflectiveOperationException e) {
-			e.printStackTrace();
-		}
-		 ServerFunctionLibrary_functionCompilationLevel = sfl_fcl;
-	}
 
 	@SuppressWarnings("deprecation")
 	private static NamespacedKey fromResourceLocation(ResourceLocation key) {
@@ -461,7 +442,7 @@ public class NMS_1_17_R1 implements NMS<CommandSourceStack> {
 
 	@Override
 	public com.mojang.brigadier.CommandDispatcher<CommandSourceStack> getBrigadierDispatcher() {
-		return MINECRAFT_SERVER.getCommands().getDispatcher();
+		return MINECRAFT_SERVER.vanillaCommandDispatcher.getDispatcher();
 	}
 
 	@Override
@@ -827,30 +808,51 @@ public class NMS_1_17_R1 implements NMS<CommandSourceStack> {
 	public boolean isVanillaCommandWrapper(Command command) {
 		return command instanceof VanillaCommandWrapper;
 	}
+	
+	private static Collection<String> discoverNewPacks(PackRepository resourcepackrepository, WorldData savedata,
+			Collection<String> collection) {
+		resourcepackrepository.reload();
+		Collection<String> collection1 = Lists.newArrayList(collection);
+		Collection<String> collection2 = savedata.getDataPackConfig().getDisabled();
+		Iterator iterator = resourcepackrepository.getAvailableIds().iterator();
+
+		while (iterator.hasNext()) {
+			String s = (String) iterator.next();
+			if (!collection2.contains(s) && !collection1.contains(s)) {
+				collection1.add(s);
+			}
+		}
+
+		return collection1;
+	}
 
 	@Override
 	public void reloadDataPacks()
 			throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+		
+		
+		
+		MinecraftServer minecraftserver = MINECRAFT_SERVER;
+		PackRepository resourcepackrepository = minecraftserver.getPackRepository();
+		WorldData savedata = minecraftserver.getWorldData();
+		Collection<String> collection = resourcepackrepository.getSelectedIds();
+		Collection<String> collection1 = discoverNewPacks(resourcepackrepository, savedata, collection);
+		
+		minecraftserver.reloadResources(collection1).exceptionally((throwable) -> {
+			System.out.println("Dooped it up!");
+			return null;
+		});
+		
+		
+		
+		/*
 		CommandAPI.logNormal("Reloading datapacks...");
-
+		
 		// Get previously declared recipes to be re-registered later
 		Iterator<Recipe> recipes = Bukkit.recipeIterator();
 
 		// Update the commandDispatcher with the current server's commandDispatcher
 		ServerResources serverResources = MINECRAFT_SERVER.resources;
-		serverResources.commands = MINECRAFT_SERVER.getCommands();
-
-		// Update the ServerFunctionLibrary for the server resources which now has the new commandDispatcher
-		try {
-			ServerFunctionLibrary replacement = new ServerFunctionLibrary(
-				(int) ServerFunctionLibrary_functionCompilationLevel.get(serverResources.getFunctionLibrary()),
-				serverResources.commands.getDispatcher()
-			);
-			
-			CommandAPIHandler.getInstance().getField(ServerResources.class, "j").set(serverResources, replacement);
-		} catch (IllegalArgumentException | IllegalAccessException e1) {
-			e1.printStackTrace();
-		}
 		
 		// Construct the new CompletableFuture that now uses our updated serverResources
 		CompletableFuture<?> unitCompletableFuture = ((ReloadableResourceManager) serverResources.getResourceManager()).reload(
@@ -892,7 +894,7 @@ public class NMS_1_17_R1 implements NMS<CommandSourceStack> {
 			e.printStackTrace(printWriter);
 			
 			CommandAPI.logError("Failed to load datapacks, can't proceed with normal server load procedure. Try fixing your datapacks?\n" + stringWriter.toString());
-		}
+		}*/
 	}
 
 	@Override

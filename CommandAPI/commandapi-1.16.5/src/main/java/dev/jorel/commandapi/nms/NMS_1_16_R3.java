@@ -174,20 +174,16 @@ public class NMS_1_16_R3 implements NMS<CommandListenerWrapper> {
 	
 	private static final MinecraftServer MINECRAFT_SERVER = ((CraftServer) Bukkit.getServer()).getServer();
 	private static final VarHandle DATAPACKRESOURCES_B;
-	private static final VarHandle CUSTOMFUNCTIONMANAGER_G;
 	
 	// Compute all var handles all in one go so we don't do this during main server runtime
 	static {
 		VarHandle dpr_b = null;
-		VarHandle cfm_g = null;
 		 try {
 			 dpr_b = MethodHandles.privateLookupIn(DataPackResources.class, MethodHandles.lookup()).findVarHandle(DataPackResources.class, "b", IReloadableResourceManager.class);			 
-			 cfm_g = MethodHandles.privateLookupIn(CustomFunctionManager.class, MethodHandles.lookup()).findVarHandle(CustomFunctionManager.class, "g", int.class);
 		} catch (ReflectiveOperationException e) {
 			e.printStackTrace();
 		}
 		 DATAPACKRESOURCES_B = dpr_b;
-		 CUSTOMFUNCTIONMANAGER_G = cfm_g;
 	}
 
 	@SuppressWarnings("deprecation")
@@ -470,7 +466,7 @@ public class NMS_1_16_R3 implements NMS<CommandListenerWrapper> {
 
 	@Override
 	public com.mojang.brigadier.CommandDispatcher<CommandListenerWrapper> getBrigadierDispatcher() {
-		return MINECRAFT_SERVER.getCommandDispatcher().a();
+		return MINECRAFT_SERVER.vanillaCommandDispatcher.a();
 	}
 
 	@Override
@@ -845,16 +841,6 @@ public class NMS_1_16_R3 implements NMS<CommandListenerWrapper> {
 
 		// Update the commandDispatcher with the current server's commandDispatcher
 		DataPackResources datapackResources = MINECRAFT_SERVER.dataPackResources;
-		datapackResources.commandDispatcher = MINECRAFT_SERVER.getCommandDispatcher();
-
-		// Update the CustomFunctionManager for the datapackResources which now has the new commandDispatcher
-		try {
-			CommandAPIHandler.getInstance().getField(DataPackResources.class, "i").set(datapackResources,
-					new CustomFunctionManager((int) CUSTOMFUNCTIONMANAGER_G.get(datapackResources.a()),
-							datapackResources.commandDispatcher.a()));
-		} catch (IllegalArgumentException | IllegalAccessException e1) {
-			e1.printStackTrace();
-		}
 
 		// Construct the new CompletableFuture that now uses our updated datapackResources
 		CompletableFuture<?> unitCompletableFuture = ((IReloadableResourceManager) DATAPACKRESOURCES_B
