@@ -80,23 +80,33 @@ import dev.jorel.commandapi.preprocessor.RequireField;
  * registration and unregistration of commands.
  */
 @RequireField(in = CommandNode.class, name = "children", ofType = Map.class)
+@RequireField(in = CommandNode.class, name = "literals", ofType = Map.class)
+@RequireField(in = CommandNode.class, name = "arguments", ofType = Map.class)
 @RequireField(in = CommandContext.class, name = "arguments", ofType = Map.class)
 public class CommandAPIHandler<CommandSourceStack> {
 	
 	private final static VarHandle COMMANDNODE_CHILDREN;
+	private final static VarHandle COMMANDNODE_LITERALS;
+	private final static VarHandle COMMANDNODE_ARGUMENTS;
 	private final static VarHandle COMMANDCONTEXT_ARGUMENTS;
 	
 	// Compute all var handles all in one go so we don't do this during main server runtime
 	static {
 		VarHandle commandNodeChildren = null;
+		VarHandle commandNodeLiterals = null;
+		VarHandle commandNodeArguments = null;
 		VarHandle commandContextArguments = null;
 		 try {
 			 commandNodeChildren = MethodHandles.privateLookupIn(CommandNode.class, MethodHandles.lookup()).findVarHandle(CommandNode.class, "children", Map.class);
+			 commandNodeLiterals = MethodHandles.privateLookupIn(CommandNode.class, MethodHandles.lookup()).findVarHandle(CommandNode.class, "literals", Map.class);
+			 commandNodeArguments = MethodHandles.privateLookupIn(CommandNode.class, MethodHandles.lookup()).findVarHandle(CommandNode.class, "arguments", Map.class);
 			 commandContextArguments = MethodHandles.privateLookupIn(CommandContext.class, MethodHandles.lookup()).findVarHandle(CommandContext.class, "arguments", Map.class);
 		} catch (ReflectiveOperationException e) {
 			e.printStackTrace();
 		} 
 		COMMANDNODE_CHILDREN = commandNodeChildren;
+		COMMANDNODE_LITERALS = commandNodeLiterals;
+		COMMANDNODE_ARGUMENTS = commandNodeArguments;
 		COMMANDCONTEXT_ARGUMENTS = commandContextArguments;
 	}
 	
@@ -220,7 +230,9 @@ public class CommandAPIHandler<CommandSourceStack> {
 
 		// Otherwise, just remove them normally
 		commandNodeChildren.remove(commandName);
-	}		
+		((Map<String, CommandNode<?>>) COMMANDNODE_LITERALS.get(DISPATCHER.getRoot())).remove(commandName);
+		((Map<String, CommandNode<?>>) COMMANDNODE_ARGUMENTS.get(DISPATCHER.getRoot())).remove(commandName);
+	}
 
 	/**
 	 * Generates a command to be registered by the CommandAPI.
@@ -232,7 +244,7 @@ public class CommandAPIHandler<CommandSourceStack> {
 	 * @return a brigadier command which is registered internally
 	 * @throws CommandSyntaxException if an error occurs when the command is ran
 	 */
-	Command<CommandSourceStack> generateCommand(Argument[] args, CustomCommandExecutor executor, boolean converted)
+	<T extends CommandSender> Command<CommandSourceStack> generateCommand(Argument[] args, CustomCommandExecutor<T> executor, boolean converted)
 			throws CommandSyntaxException {
 
 		// Generate our command from executor
@@ -470,8 +482,8 @@ public class CommandAPIHandler<CommandSourceStack> {
 	 * the provided command. Returns true if multiliteral arguments were present (and expanded) and
 	 * returns false if multiliteral arguments were not present.
 	 */
-	private boolean expandMultiLiterals(String commandName, CommandPermission permissions, String[] aliases, Predicate<CommandSender> requirements,
-			final Argument[] args, CustomCommandExecutor executor, boolean converted) throws CommandSyntaxException, IOException {
+	private <T extends CommandSender> boolean expandMultiLiterals(String commandName, CommandPermission permissions, String[] aliases, Predicate<CommandSender> requirements,
+			final Argument[] args, CustomCommandExecutor<T> executor, boolean converted) throws CommandSyntaxException, IOException {
 		
 		//"Expands" our MultiLiterals into Literals
 		for(int index = 0; index < args.length; index++) {
@@ -589,8 +601,8 @@ public class CommandAPIHandler<CommandSourceStack> {
 	
 	// Builds our NMS command using the given arguments for this method, then
 	// registers it
-	void register(String commandName, CommandPermission permissions, String[] aliases, Predicate<CommandSender> requirements,
-			final Argument[] args, CustomCommandExecutor executor, boolean converted) throws CommandSyntaxException, IOException {
+	<T extends CommandSender> void register(String commandName, CommandPermission permissions, String[] aliases, Predicate<CommandSender> requirements,
+			final Argument[] args, CustomCommandExecutor<T> executor, boolean converted) throws CommandSyntaxException, IOException {
 		
 		//"Expands" our MultiLiterals into Literals
 		if(expandMultiLiterals(commandName, permissions, aliases, requirements, args, executor, converted)) {
@@ -611,7 +623,7 @@ public class CommandAPIHandler<CommandSourceStack> {
 			for(Argument arg : args) {
 				argumentsString.add(arg.getNodeName() + ":" + arg.getClass().getSimpleName());
 			}
-			registeredCommands.put(commandName, argumentsString);			
+			registeredCommands.put(commandName, argumentsString);
 		}
 		
 		CommandAPI.logInfo("Registering command /" + commandName + " " + builder.toString());

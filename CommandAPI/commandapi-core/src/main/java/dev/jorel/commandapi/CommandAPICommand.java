@@ -62,7 +62,7 @@ public class CommandAPICommand {
 	private Predicate<CommandSender> requirements = s -> true;
 	private List<Argument> args = new ArrayList<>();
 	private List<CommandAPICommand> subcommands = new ArrayList<>();
-	private CustomCommandExecutor executor = new CustomCommandExecutor();
+	private CustomCommandExecutor executor = new CustomCommandExecutor<>();
 	private boolean isConverted;
 	
 	/**
